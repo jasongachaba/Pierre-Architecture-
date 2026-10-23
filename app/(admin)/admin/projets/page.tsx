@@ -423,8 +423,8 @@ export default function ProjetsAdminPage() {
         const category =
           project.category_id
             ? categoryMap.get(
-                project.category_id,
-              )
+              project.category_id,
+            )
             : "";
 
         const haystack = [
@@ -522,12 +522,12 @@ export default function ProjetsAdminPage() {
     const averageProgress =
       total > 0
         ? Math.round(
-            projects.reduce(
-              (sum, project) =>
-                sum + (project.progress ?? 0),
-              0,
-            ) / total,
-          )
+          projects.reduce(
+            (sum, project) =>
+              sum + (project.progress ?? 0),
+            0,
+          ) / total,
+        )
         : 0;
 
     return {
@@ -1051,7 +1051,7 @@ export default function ProjetsAdminPage() {
               {filteredProjects.length}{" "}
               résultat
               {filteredProjects.length !==
-              1
+                1
                 ? "s"
                 : ""}
             </p>
@@ -1190,7 +1190,7 @@ export default function ProjetsAdminPage() {
           className="mt-6"
         >
           {filteredProjects.length ===
-          0 ? (
+            0 ? (
             <EmptyState
               search={search}
               filter={filter}
@@ -1221,19 +1221,13 @@ export default function ProjetsAdminPage() {
                     <ProjectRow
                       key={project.id}
                       project={project}
-                      category ={
+                      category={
                         project.category_id
-                          ? categoryMap.get(
-                              project.category_id,
-                            )
+                          ? categoryMap.get(project.category_id) ?? null
                           : null
                       }
                       index={index}
-                      onDelete={() =>
-                        setSelectedProject(
-                          project,
-                        )
-                      }
+                      onDelete={() => setSelectedProject(project)}
                     />
                   ),
                 )}
@@ -1432,20 +1426,18 @@ function FilterButton({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex h-11 shrink-0 items-center gap-2 border-r border-[#e4e1db] px-4 text-[10px] uppercase tracking-[0.15em] transition last:border-r-0 ${
-        active
+      className={`inline-flex h-11 shrink-0 items-center gap-2 border-r border-[#e4e1db] px-4 text-[10px] uppercase tracking-[0.15em] transition last:border-r-0 ${active
           ? "bg-[#292824] text-white"
           : "bg-white text-[#77736c] hover:bg-[#faf9f7]"
-      }`}
+        }`}
     >
       {label}
 
       <span
-        className={`text-[9px] ${
-          active
+        className={`text-[9px] ${active
             ? "text-[#d9d4cb]"
             : "text-[#aaa69f]"
-        }`}
+          }`}
       >
         {count}
       </span>
