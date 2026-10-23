@@ -569,9 +569,8 @@ export default async function AdminDashboardPage() {
 
             <div>
               <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#777]">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#171717]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#171717]" />
                 <span>Administration</span>
-                
               </div>
 
               <h1 className="text-3xl font-medium tracking-[-0.04em] sm:text-4xl">
@@ -1696,7 +1695,7 @@ export default async function AdminDashboardPage() {
             </Link>
           </div>
         </footer>
-          </div>
+      </div>
     </div>
   );
 }
