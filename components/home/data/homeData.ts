@@ -120,15 +120,40 @@ export type HomeData = {
 };
 
 /* ============================================================
+   SUPABASE ERROR LOGGING
+============================================================ */
+
+type SupabaseQueryError = {
+  message?: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+};
+
+function logSupabaseError(
+  label: string,
+  error: SupabaseQueryError | null,
+): void {
+  if (!error) return;
+
+  console.error(`[getHomeData] ${label}`, {
+    code: error.code ?? null,
+    message: error.message ?? "Unknown Supabase error",
+    details: error.details ?? null,
+    hint: error.hint ?? null,
+  });
+}
+
+/* ============================================================
    DATA LOADER
 ============================================================ */
 
 export async function getHomeData(): Promise<HomeData> {
   const supabase = await getSupabaseServerClient();
 
-  /* ==========================================================
+  /* ----------------------------------------------------------
      PROFILE
-  ========================================================== */
+  ---------------------------------------------------------- */
 
   const profileResult = await supabase
     .from("profiles")
@@ -154,9 +179,11 @@ export async function getHomeData(): Promise<HomeData> {
     .limit(1)
     .maybeSingle();
 
-  /* ==========================================================
+  logSupabaseError("Profile query failed", profileResult.error);
+
+  /* ----------------------------------------------------------
      SOCIAL LINKS
-  ========================================================== */
+  ---------------------------------------------------------- */
 
   const socialResult = await supabase
     .from("profile_social_links")
@@ -171,13 +198,16 @@ export async function getHomeData(): Promise<HomeData> {
       display_order
     `)
     .eq("is_visible", true)
-    .order("display_order", {
-      ascending: true,
-    });
+    .order("display_order", { ascending: true });
 
-  /* ==========================================================
-     PROJECTS
-  ========================================================== */
+  logSupabaseError(
+    "Social links query failed",
+    socialResult.error,
+  );
+
+  /* ----------------------------------------------------------
+     PUBLISHED PROJECTS
+  ---------------------------------------------------------- */
 
   const projectsResult = await supabase
     .from("projects")
@@ -217,19 +247,18 @@ export async function getHomeData(): Promise<HomeData> {
       updated_at
     `)
     .eq("status", "published")
-    .order("featured", {
-      ascending: false,
-    })
-    .order("display_order", {
-      ascending: true,
-    })
+    .order("featured", { ascending: false })
+    .order("display_order", { ascending: true })
     .order("published_at", {
       ascending: false,
+      nullsFirst: false,
     });
 
-  /* ==========================================================
-     ARTICLES
-  ========================================================== */
+  logSupabaseError("Projects query failed", projectsResult.error);
+
+  /* ----------------------------------------------------------
+     PUBLISHED ARTICLES
+  ---------------------------------------------------------- */
 
   const articlesResult = await supabase
     .from("articles")
@@ -252,58 +281,28 @@ export async function getHomeData(): Promise<HomeData> {
       updated_at
     `)
     .eq("status", "published")
-    .order("featured", {
-      ascending: false,
-    })
-    .order("display_order", {
-      ascending: true,
-    })
+    .order("featured", { ascending: false })
+    .order("display_order", { ascending: true })
     .order("published_at", {
       ascending: false,
+      nullsFirst: false,
     });
 
-  /* ==========================================================
-     ERRORS - BASE QUERIES
-  ========================================================== */
+  logSupabaseError("Articles query failed", articlesResult.error);
 
-  if (profileResult.error) {
-    console.error(
-      "[getHomeData] Profile error:",
-      profileResult.error,
-    );
-  }
+  /* ----------------------------------------------------------
+     NORMALISE RESULTS
 
-  if (socialResult.error) {
-    console.error(
-      "[getHomeData] Social links error:",
-      socialResult.error,
-    );
-  }
-
-  if (projectsResult.error) {
-    console.error(
-      "[getHomeData] Projects error:",
-      projectsResult.error,
-    );
-  }
-
-  if (articlesResult.error) {
-    console.error(
-      "[getHomeData] Articles error:",
-      articlesResult.error,
-    );
-  }
-
-  /* ==========================================================
-     NORMALISATION
-  ========================================================== */
+     A failed query is logged and does not crash the loader
+     solely because its data is null.
+  ---------------------------------------------------------- */
 
   const profile: HomeProfile | null = profileResult.data
     ? {
-      ...profileResult.data,
-      specialties: profileResult.data.specialties ?? [],
-      languages: profileResult.data.languages ?? [],
-    }
+        ...profileResult.data,
+        specialties: profileResult.data.specialties ?? [],
+        languages: profileResult.data.languages ?? [],
+      }
     : null;
 
   const socialLinks: HomeSocialLink[] =
@@ -315,10 +314,11 @@ export async function getHomeData(): Promise<HomeData> {
   const articles: HomeArticle[] =
     (articlesResult.data ?? []) as HomeArticle[];
 
-  /* ==========================================================
+  /* ----------------------------------------------------------
      PROJECT GALLERY
-     Images are fetched only for published projects.
-  ========================================================== */
+
+     Load visible images only for published projects.
+  ---------------------------------------------------------- */
 
   let galleryImages: HomeProjectGalleryImage[] = [];
 
@@ -343,46 +343,56 @@ export async function getHomeData(): Promise<HomeData> {
       `)
       .in("project_id", projectIds)
       .eq("is_visible", true)
-      .order("display_order", {
-        ascending: true,
-      });
+      .order("display_order", { ascending: true });
 
-    if (galleryResult.error) {
-      console.error(
-        "[getHomeData] Project gallery error:",
-        galleryResult.error,
-      );
-    } else {
-      galleryImages = (galleryResult.data ??
-        []) as HomeProjectGalleryImage[];
+    logSupabaseError(
+      "Project gallery query failed",
+      galleryResult.error,
+    );
+
+    if (!galleryResult.error) {
+      galleryImages = (
+        galleryResult.data ?? []
+      ) as HomeProjectGalleryImage[];
     }
   }
 
-  /* ==========================================================
-     GROUP GALLERY BY PROJECT
-  ========================================================== */
+  /* ----------------------------------------------------------
+     GROUP IMAGES BY PROJECT
+  ---------------------------------------------------------- */
+
+  const imagesByProject = new Map<
+    string,
+    HomeProjectGalleryImage[]
+  >();
+
+  for (const image of galleryImages) {
+    const projectImages =
+      imagesByProject.get(image.project_id) ?? [];
+
+    projectImages.push(image);
+    imagesByProject.set(image.project_id, projectImages);
+  }
 
   const gallery: HomeProjectGallery[] = projects
     .map((project) => ({
       project,
-      images: galleryImages.filter(
-        (image) => image.project_id === project.id,
-      ),
+      images: imagesByProject.get(project.id) ?? [],
     }))
-    .filter((group) => group.images.length > 0);
+    .filter(({ images }) => images.length > 0);
 
-  /* ==========================================================
+  /* ----------------------------------------------------------
      FEATURED PROJECT
-  ========================================================== */
+  ---------------------------------------------------------- */
 
   const featuredProject =
     projects.find((project) => project.featured) ??
     projects[0] ??
     null;
 
-  /* ==========================================================
-     RETURN
-  ========================================================== */
+  /* ----------------------------------------------------------
+     RETURN HOME DATA
+  ---------------------------------------------------------- */
 
   return {
     profile,
